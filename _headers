@@ -1,0 +1,12 @@
+# Netlify 응답 헤더 설정 (다른 서버에서는 무시됩니다)
+
+# 매니페스트는 정식 형식으로 내려줘야 홈 화면 아이콘을 정확하게 인식합니다
+/manifest.webmanifest
+  Content-Type: application/manifest+json; charset=utf-8
+
+# 본체와 서비스워커는 항상 새 파일인지 확인하고 받도록 합니다
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
