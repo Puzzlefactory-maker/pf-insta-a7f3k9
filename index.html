@@ -827,6 +827,46 @@
 .story-top>*+*{margin-left:9px}
 .story-top .sname>*+*{margin-left:4px}
 .story-bottom>*+*{margin-left:14px}
+.confirm-actions>*+*{margin-left:8px}</style><style id="oldBrowserGap">.ig-head>*+*{margin-left:8px}
+.head-right>*+*{margin-left:2px}
+.stories>*+*{margin-left:14px}
+.post-head>*+*{margin-left:9px}
+.post-user>*+*{margin-left:4px}
+.post-dots>*+*{margin-left:4px}
+.post-actions>*+*{margin-left:15px}
+.comment>*+*{margin-left:10px}
+.detail-caption>*+*{margin-left:10px}
+.prof-top>*+*{margin-left:22px}
+.prof-btns>*+*{margin-left:6px}
+.dmlist-title>*+*{margin-left:6px}
+.dm-search>*+*{margin-left:10px}
+.dm-item>*+*{margin-left:13px}
+.dmthread-head>*+*{margin-left:10px}
+.dmt-name>*+*{margin-left:3px}
+.dm-thread>*+*{margin-top:3px}
+.dm-row>*+*{margin-left:8px}
+.dm-inputbar>*+*{margin-left:9px}
+.dm-field>*+*{margin-left:12px}
+.bp-row>*+*{margin-left:10px}
+.acct-row>*+*{margin-left:12px}
+.acct-row .an>*+*{margin-left:4px}
+.prof-switch>*+*{margin-left:5px}
+.pick-item>*+*{margin-left:14px}
+.admin-header .row-actions>*+*{margin-left:8px}
+.admin-body>*+*{margin-left:14px}
+.admin-tabs>*+*{margin-left:6px}
+.frow>*+*{margin-left:8px}
+.alist-item .top>*+*{margin-left:8px}
+.row-actions>*+*{margin-left:6px}
+.pic-cell .pic-tools>*+*{margin-left:4px}
+.pic-add>*+*{margin-top:4px}
+.story-row>*+*{margin-left:10px}
+.add-row>*+*{margin-left:8px}
+.add-row .left>*+*{margin-left:6px}
+.story-bars>*+*{margin-left:3px}
+.story-top>*+*{margin-left:9px}
+.story-top .sname>*+*{margin-left:4px}
+.story-bottom>*+*{margin-left:14px}
 .confirm-actions>*+*{margin-left:8px}</style></head>
 <body>
 <div id="phone" style="">
@@ -1003,7 +1043,7 @@
    ========================================================================= */
 
 /*__CS_DATA_START__ 아래 두 줄이 이 파일에 들어있는 내용입니다. */
-const DATA_VERSION = "2026-10-08-164938";
+const DATA_VERSION = "2026-10-08-171459";
 const EMBEDDED_DATA = {
  "tree": [
   {
@@ -1615,7 +1655,7 @@ const EMBEDDED_DATA = {
      "followers": 335,
      "following": 364,
      "verified": false,
-     "isMain": true,
+     "isMain": false,
      "stories": [],
      "switchTo": [
       "xmg90gws"
@@ -1630,7 +1670,7 @@ const EMBEDDED_DATA = {
      "followers": 0,
      "following": 0,
      "verified": false,
-     "isMain": false,
+     "isMain": true,
      "stories": [],
      "switchTo": []
     },
@@ -1645,7 +1685,9 @@ const EMBEDDED_DATA = {
      "verified": false,
      "isMain": false,
      "stories": [],
-     "switchTo": []
+     "switchTo": [
+      "xqr6dk41"
+     ]
     }
    ],
    "posts": [
@@ -1904,7 +1946,7 @@ const EMBEDDED_DATA = {
      "name": "김훈남",
      "avatar": "",
      "bio": "",
-     "followers": 986,
+     "followers": 1242,
      "following": 765,
      "verified": false,
      "isMain": false,
@@ -1927,7 +1969,8 @@ const EMBEDDED_DATA = {
      "hours": 0,
      "mins": 0,
      "comments": [],
-     "cmtCount": 35
+     "cmtCount": 35,
+     "only": []
     },
     {
      "id": "x11ac3wr",
@@ -1943,7 +1986,8 @@ const EMBEDDED_DATA = {
      "hours": 14,
      "mins": 840,
      "comments": [],
-     "cmtCount": 76
+     "cmtCount": 76,
+     "only": []
     },
     {
      "id": "xxmkcbvn",
@@ -3872,32 +3916,58 @@ function wireAccountFields(u, redraw){
 }
 
 /* ----- “보이는 계정” 고르기 (기본은 모두에게) ----- */
-function onlyFieldsHTML(o, pre){
+/* 목록에 붙는 “일부 계정만” 표시 */
+function onlyBadge(o){
+  const names = ((o && o.only) || []).map(id0=>{ const u=userById(id0); return u?('@'+u.username):null; }).filter(Boolean);
+  if(!names.length) return '';
+  return `<br><span style="color:#0095f6">👁 ${esc(names.join(', '))} 에게만</span>`;
+}
+/* ----- “어떤 계정에게 보일지” 고르기 (게시물 · 스토리 · DM 공통) ----- */
+function onlyFieldsHTML(o, pre, title){
   const mates = L().users || [];
   if(mates.length <= 1) return '';           /* 계정이 하나뿐이면 고를 게 없다 */
   const all = !Array.isArray(o.only) || !o.only.length;
+  const picked = (o.only||[]).map(id0=>{ const u=userById(id0); return u?('@'+u.username):null; }).filter(Boolean);
   return `
-    <div class="field" style="margin-bottom:4px">
-      <label style="display:flex;gap:8px;align-items:center;cursor:pointer">
+    <div style="margin:12px 0 10px;padding:11px 12px;border:1px solid ${all?'#e3e8ee':'#cfe0ff'};border-radius:10px;background:${all?'#fbfcfd':'#eff5ff'}">
+      <div style="font-size:13px;font-weight:700;color:#2b3440;margin-bottom:7px">
+        👁 ${esc(title||'이 항목을 볼 계정')}
+        <span id="${pre}-onlysum" style="font-weight:400;color:${all?'#8a97a5':'#2f4d80'};font-size:12px">
+          — ${all?'지금은 모두에게 보입니다':esc(picked.join(', ')+' 에게만 보입니다')}</span>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13px">
         <input type="checkbox" id="${pre}-all" ${all?'checked':''} style="width:auto"> 모두에게 보이기
       </label>
-    </div>
-    <div id="${pre}-onlybox" style="${all?'display:none':''};padding:2px 0 8px">
-      ${mates.map(u=>`<label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13px;padding:3px 0">
-        <input type="checkbox" data-only="${esc(u.id)}" ${(o.only||[]).indexOf(u.id)>=0?'checked':''} style="width:auto">
-        @${esc(u.username)}${u.id===viewAsId?' <span style="color:#0095f6">(지금 보는 계정)</span>':''}</label>`).join('')}
-      <div class="hint" style="margin-top:4px">고른 계정으로 볼 때만 보입니다. 하나도 안 고르면 모두에게 보입니다.</div>
+      <div id="${pre}-onlybox" style="${all?'display:none':''};padding:7px 0 2px;margin-top:6px;border-top:1px solid #e3e8ee">
+        <div style="font-size:12px;color:#6a7a8a;margin:2px 0 5px">보여줄 계정을 고르세요 (여러 명 가능)</div>
+        ${mates.map(u=>`<label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13px;padding:4px 0">
+          <input type="checkbox" data-only="${esc(u.id)}" ${(o.only||[]).indexOf(u.id)>=0?'checked':''} style="width:auto">
+          @${esc(u.username)}${u.id===viewAsId?' <span style="color:#0095f6">(지금 보는 계정)</span>':''}</label>`).join('')}
+        <div class="hint" style="margin-top:4px">고른 계정을 “내 계정”으로 쓰는 폰에서만 보입니다. 하나도 안 고르면 모두에게 보입니다.</div>
+      </div>
     </div>`;
 }
 function wireOnlyFields(o, pre, after){
   const allEl = $('#'+pre+'-all'); if(!allEl) return;
   const box = $('#'+pre+'-onlybox');
+  const sum = $('#'+pre+'-onlysum');
+  const resum = ()=>{
+    if(!sum) return;
+    const names = (o.only||[]).map(id0=>{ const u=userById(id0); return u?('@'+u.username):null; }).filter(Boolean);
+    const all = !names.length;
+    sum.textContent = all ? '— 지금은 모두에게 보입니다' : `— ${names.join(', ')} 에게만 보입니다`;
+    sum.style.color = all ? '#8a97a5' : '#2f4d80';
+  };
   const pull = ()=>{
     o.only = [...box.querySelectorAll('[data-only]')].filter(c=>c.checked).map(c=>c.dataset.only);
-    save(); renderFeed(); after && after();
+    save(); resum(); renderFeed(); after && after();
   };
   allEl.onchange = e=>{
-    if(e.target.checked){ o.only = []; box.style.display='none'; box.querySelectorAll('[data-only]').forEach(c=>c.checked=false); save(); renderFeed(); after && after(); }
+    if(e.target.checked){
+      o.only = []; box.style.display='none';
+      box.querySelectorAll('[data-only]').forEach(c=>c.checked=false);
+      save(); resum(); renderFeed(); after && after();
+    }
     else box.style.display='';
   };
   box.querySelectorAll('[data-only]').forEach(c=> c.onchange = pull);
@@ -4190,7 +4260,7 @@ function renderAdminStories(){
       </div>
       ${ss.map(s=>`<div class="story-row">
           <div class="story-thumb">${s.image?`<img src="${s.image}">`:''}</div>
-          <span>시간표시 : ${esc(timeLabel(s))}</span>
+          <span>시간표시 : ${esc(timeLabel(s))}${onlyBadge(s)}</span>
         </div>`).join('')}
       </div>`;
   });
@@ -4226,7 +4296,7 @@ function renderStoryRows(u, uid){
         <button class="btn btn-danger btn-sm" data-sdel="${i}" style="margin-left:auto">삭제</button>
       </div>
       ${whenFieldsHTML(s, 's'+i)}
-      ${onlyFieldsHTML(s, 's'+i)}
+      ${onlyFieldsHTML(s, 's'+i, '이 스토리를 볼 계정')}
     </div>`).join('') || `<div class="hint">스토리가 없습니다.</div>`;
   u.stories.forEach((s,i)=>{ wireWhenFields(s, 's'+i, ()=> editStory(uid)); wireOnlyFields(s, 's'+i, ()=> editStory(uid)); });
   box.querySelectorAll('[data-sp]').forEach(b=> b.onclick=()=> pickImage(1080, url=>{ u.stories[Number(b.dataset.sp)].image=url; save(); editStory(uid); }));
@@ -4249,7 +4319,7 @@ function renderAdminPosts(){
       <div class="top">
         <div style="display:flex;gap:10px;align-items:center">
           <div class="thumb-pick" style="width:60px;height:80px;border-radius:8px">${n?`<img src="${p.images[0]}">`:'사진'}</div>
-          <div><div class="nm">@${esc(au.username)}</div><div class="sub">${esc(timeLabel(p))} · 사진 ${n}장 · 좋아요 ${fmtNum(p.likes)} · 댓글 ${fmtNum(cmtCountOf(p))}${Number(p.cmtCount)>0?`<span style="color:#8a97a5">(지정·실제 ${(p.comments||[]).length})</span>`:''}</div></div>
+          <div><div class="nm">@${esc(au.username)}</div><div class="sub">${esc(timeLabel(p))} · 사진 ${n}장 · 좋아요 ${fmtNum(p.likes)} · 댓글 ${fmtNum(cmtCountOf(p))}${Number(p.cmtCount)>0?`<span style="color:#8a97a5">(지정·실제 ${(p.comments||[]).length})</span>`:''}${onlyBadge(p)}</div></div>
         </div>
         <div class="row-actions"><button class="btn btn-ghost btn-sm" data-epost="${p.id}">편집</button></div>
       </div></div>`;
@@ -4292,7 +4362,7 @@ function renderEditPost(pid){
       </div>
       <div class="hint" style="margin-top:-4px">댓글 수를 적어 두면 <b>댓글을 쓰지 않아도</b> “댓글 N개 모두 보기”로 그 숫자가 보입니다.<br>비워두면 아래에 실제로 적은 댓글 개수가 그대로 보입니다.</div>
       ${whenFieldsHTML(p, 'p')}
-      ${onlyFieldsHTML(p, 'p')}
+      ${onlyFieldsHTML(p, 'p', '이 게시물을 볼 계정')}
       <div class="field"><label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" id="p-liked" ${p.liked?'checked':''} style="width:auto"> 좋아요 눌린 상태(빨간 하트)</label></div>
     </div>
     <div class="asec">
@@ -4424,7 +4494,7 @@ function renderEditDM(dmid){
         :`<div class="hint" style="margin-top:8px">모든 계정이 이미 참여하고 있습니다.</div>`}
       <div class="hint">참여자가 <b>3명 이상이면 단톡방</b>이 됩니다.<br>
         “내 계정”인 사람이 오른쪽(보라 그라데이션)에 표시되고, 내 계정을 바꾸면 이 대화도 자동으로 그 시점으로 뒤집힙니다.</div>
-      ${onlyFieldsHTML(dm, 'dm')}
+      ${onlyFieldsHTML(dm, 'dm', '이 대화를 볼 계정')}
     </div>
     <div class="asec">
       <h3>대화 내용</h3>
@@ -4952,4 +5022,5 @@ setTimeout(function(){ if(!data && !bootFailed) showBootError('load', {message:'
 
 
 <input type="file" accept="image/*" style="position: fixed; left: -9999px; top: 0px; width: 1px; height: 1px; opacity: 0;">
+
 </body></html>
