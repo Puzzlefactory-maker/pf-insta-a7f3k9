@@ -5321,6 +5321,10 @@ function backupSectionHTML(){
       <input type="file" id="importFile" accept="application/json" style="display:none">
       <button class="btn btn-dark btn-block" id="exportHtmlBtn">새 index.html 만들기</button>
       <div class="hint">지금 내용을 그대로 담은 배포용 index.html 을 만듭니다. 이 파일로 폴더의 index.html 을 바꾸면, 다른 폰에 설치할 때도 이 내용이 그대로 들어갑니다.</div>
+      <div style="border-top:1px solid #e3e8ee;margin:12px 0 10px"></div>
+      <button class="btn btn-ghost btn-block" id="useFileAny">지금 파일 내용으로 바꾸기</button>
+      <div class="hint">이 기기에 저장된 내용을 버리고, <b>지금 열려 있는 index.html 에 담긴 내용</b>(이미지 ${countImages(EMBEDDED_DATA)}개 · 버전 ${esc(DATA_VERSION)})으로 맞춥니다.<br>
+        바꾸기 전 내용은 보관되어 바로 되돌릴 수 있습니다. 안내가 안 떠도 언제든 쓸 수 있습니다.</div>
       <div class="hint" style="background:#f4f6f8;border-radius:8px;padding:9px 11px;margin-top:8px;color:#5a6a7a">
         <b>사진 확인</b> <span style="font-size:11px">(로고 포함한 이미지 개수)</span><br>
         지금 화면에 든 이미지 : <b>${countImages(data)}개</b><br>
@@ -5332,6 +5336,10 @@ function backupSectionHTML(){
     </div>`;
 }
 function wireBackupSection(){
+  const ufa=$('#useFileAny');
+  if(ufa) ufa.onclick = ()=> confirmDialog(
+    '지금 열려 있는 파일의 내용으로 바꿀까요?\n이 기기에 저장된 내용은 따로 보관되어 되돌릴 수 있습니다.',
+    ()=> useFileData(), '파일 내용으로 바꾸기', '취소');
   const uf=$('#useFile');
   if(uf) uf.onclick = ()=> confirmDialog(
     '파일에 담겨 온 내용으로 바꿀까요?\n지금 이 기기에 저장된 내용은 따로 보관되고, 바로 되돌릴 수 있습니다.',
@@ -6546,6 +6554,13 @@ async function checkNewFile(){
   if(('serviceWorker' in navigator) && location.protocol.indexOf('http')===0){
     navigator.serviceWorker.register('./sw.js?v=' + encodeURIComponent(DATA_VERSION), {updateViaCache:'none'})
       .catch(()=>{});
+  }
+
+  /* 주소에 ?usefile=1 을 붙여 열면, 관리자 화면에 들어가지 않고도 파일 내용으로 바꿀 수 있다 */
+  if(/[?&]usefile=1/.test(location.search)){
+    setTimeout(()=> confirmDialog(
+      '이 파일에 담긴 내용으로 바꿀까요?\n이 기기에 저장된 내용은 따로 보관되어 되돌릴 수 있습니다.',
+      ()=> useFileData(), '파일 내용으로 바꾸기', '취소'), 500);
   }
 
   /* 새로 올린 파일이 있으면 스스로 받아 온다 (아래 설명 참고) */
