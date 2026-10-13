@@ -6372,6 +6372,52 @@ function showBootError(where, e){
 }
 setTimeout(function(){ if(!data && !bootFailed) showBootError('load', {message:'저장된 내용을 읽는 중 응답이 없습니다'}); }, 6000);
 
+/* ---------- 새 파일 자동 받기 ----------
+   깃허브·넷리파이에 새 index.html 을 올려도, 폰에 깔린 앱은 캐시 때문에 예전 화면을 계속 보여줄 수 있다.
+   그래서 앱을 열 때마다 서버의 index.html 앞부분만 읽어 DATA_VERSION 을 직접 비교한다.
+     · _uc 가 붙은 요청은 서비스워커가 손대지 않으므로 캐시를 거치지 않는다
+     · 더 새 파일이면 _fresh 를 붙여 한 번 다시 열어 캐시를 건너뛴다
+   기기에 저장된 내용(사진·게시물)은 그대로다. 바뀌는 것은 화면·기능 쪽 파일뿐이다. */
+const FRESH_KEY = 'crimescene_insta_fresh';
+function freshJustLoaded(){
+  try{ return sessionStorage.getItem(FRESH_KEY) === DATA_VERSION; }catch(e){ return false; }
+}
+async function serverVersion(){
+  const res = await fetch('./index.html?_uc=' + Date.now(), {cache:'no-store'});
+  if(!res || !res.ok) return '';
+  const re = /const DATA_VERSION = "([^"]+)"/;
+  /* 파일이 수 MB 라서 전부 받지 않는다. 앞부분만 읽다가 찾으면 바로 끊는다 */
+  if(res.body && res.body.getReader){
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let acc = '';
+    while(acc.length < 400000){
+      const chunk = await reader.read();
+      if(chunk.done) break;
+      acc += dec.decode(chunk.value, {stream:true});
+      const m = acc.match(re);
+      if(m){ try{ reader.cancel(); }catch(e){} return m[1]; }
+    }
+    try{ reader.cancel(); }catch(e){}
+    const m2 = acc.match(re);
+    return m2 ? m2[1] : '';
+  }
+  const txt = await res.text();
+  const m3 = txt.match(re);
+  return m3 ? m3[1] : '';
+}
+async function checkNewFile(){
+  if(location.protocol.indexOf('http') !== 0) return;      /* 파일을 직접 열었으면 받을 곳이 없다 */
+  try{ if(sessionStorage.getItem(FRESH_KEY)) return; }catch(e){}
+  try{
+    const ver = await serverVersion();
+    if(!ver || ver === DATA_VERSION) return;               /* 서버 파일이 지금 것과 같다 */
+    try{ sessionStorage.setItem(FRESH_KEY, ver); }catch(e){}
+    const u = new URL(location.href);
+    u.searchParams.set('_fresh', Date.now().toString(36));
+    location.replace(u.href);
+  }catch(e){}                                              /* 인터넷이 없으면 조용히 넘어간다 */
+}
+
 /* 초기 렌더 (저장소가 IndexedDB 라 읽기가 비동기다) */
 (async function boot(){
   try{
@@ -6445,6 +6491,10 @@ setTimeout(function(){ if(!data && !bootFailed) showBootError('load', {message:'
     navigator.serviceWorker.register('./sw.js?v=' + encodeURIComponent(DATA_VERSION), {updateViaCache:'none'})
       .catch(()=>{});
   }
+
+  /* 새로 올린 파일이 있으면 스스로 받아 온다 (아래 설명 참고) */
+  if(freshJustLoaded()) setTimeout(()=> toast('새 파일을 받았습니다'), 700);
+  else checkNewFile();
   }catch(e){ showBootError('boot', e); }
 })();
 </script>
