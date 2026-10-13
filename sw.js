@@ -89,7 +89,7 @@ function lastResort() {
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-/* 뒤에서 조용히 새 내용을 받아 캐시에 넣어 둔다 (다음 실행 때 반영) */
+/* 뒤에서 조용히 새 내용을 받아 캐시에 넣어 둔다 */
 function refresh(path) {
   try {
     fetch(path + '?_sw=' + Date.now().toString(36), { credentials: 'same-origin' })
@@ -99,6 +99,46 @@ function refresh(path) {
         return caches.open(CACHE).then(function (cache) { return cache.put(new Request(path), copy); });
       })['catch'](function () {});
   } catch (e) {}
+}
+
+/* 화면(문서)은 “서버 먼저, 안 되면 캐시” 로 가져온다.
+   · 인터넷이 되면 → 올린 새 파일이 그 자리에서 바로 반영된다
+   · 인터넷이 없거나 느리면 → DOC_WAIT(ms) 만 기다렸다가 캐시로 연다 (예전처럼 바로 열림)
+   예전에는 캐시를 먼저 내주느라, 새 파일을 올려도 “한 번 더 열어야” 반영됐다. */
+var DOC_WAIT = 2000;
+function cachedDoc(path) {
+  return caches.match(path, { ignoreSearch: true }).then(function (hit) {
+    if (hit) return hit;
+    return caches.match('./index.html', { ignoreSearch: true }).then(function (h2) {
+      return h2 || lastResort();
+    });
+  })['catch'](function () { return lastResort(); });
+}
+function docResponse(path) {
+  return new Promise(function (resolve) {
+    var settled = false;
+    var timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;                       /* 너무 오래 걸리면 일단 캐시로 연다 */
+      resolve(cachedDoc(path));
+    }, DOC_WAIT);
+    var opts = { credentials: 'same-origin' };
+    try { opts.cache = 'reload'; } catch (e) {}   /* 브라우저가 들고 있던 옛 복사본을 쓰지 않는다 */
+    fetch(path + '?_sw=' + Date.now().toString(36), opts).then(function (fresh) {
+      if (!fresh || !fresh.ok) throw new Error('bad');
+      var copy = fresh.clone();
+      caches.open(CACHE).then(function (cache) {
+        return cache.put(new Request(path), copy);
+      })['catch'](function () {});
+      if (settled) return;                  /* 이미 캐시로 열었으면 캐시만 갱신해 둔다 */
+      settled = true; clearTimeout(timer);
+      resolve(fresh);
+    })['catch'](function () {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      resolve(cachedDoc(path));
+    });
+  });
 }
 
 self.addEventListener('fetch', function (event) {
@@ -116,30 +156,26 @@ self.addEventListener('fetch', function (event) {
   var path = href.split('#')[0].split('?')[0];
   var doc = isDocReq(req, path);
 
+  /* 화면(문서)은 서버 먼저 — 올린 새 파일이 바로 반영된다 (안 되면 캐시로) */
+  if (doc) { event.respondWith(docResponse(path)); return; }
+
+  /* 그 밖의 파일(아이콘·매니페스트 등)은 캐시 먼저 — 빨리 열리고 오프라인에서도 뜬다 */
   event.respondWith(
-    caches.match(doc ? path : req, { ignoreSearch: true }).then(function (hit) {
-      if (hit) {
-        if (doc) refresh(path);          /* 바로 열어 주고, 새 내용은 뒤에서 받는다 */
-        return hit;
-      }
-      /* 캐시에 없으면 서버에서 받아 와 넣어 둔다 */
+    caches.match(req, { ignoreSearch: true }).then(function (hit) {
+      if (hit) return hit;
       return fetch(req).then(function (fresh) {
         if (fresh && fresh.ok) {
           var copy = fresh.clone();
           caches.open(CACHE).then(function (cache) {
-            cache.put(doc ? new Request(path) : req, copy);
+            return cache.put(req, copy);
           })['catch'](function () {});
         }
         return fresh;
       })['catch'](function () {
-        /* 서버도 못 가고 캐시도 없을 때 — 그래도 오류 화면은 띄우지 않는다 */
-        if (!doc) return new Response('', { status: 504, statusText: 'offline' });
-        return caches.match('./index.html', { ignoreSearch: true }).then(function (h2) {
-          return h2 || lastResort();
-        });
+        return new Response('', { status: 504, statusText: 'offline' });
       });
     })['catch'](function () {
-      return doc ? lastResort() : new Response('', { status: 504, statusText: 'offline' });
+      return new Response('', { status: 504, statusText: 'offline' });
     })
   );
 });
