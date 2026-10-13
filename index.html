@@ -3576,6 +3576,11 @@ let restorePoint = null;      /* 파일 내용으로 갈아끼우기 직전의 �
    파일에 새로 담긴 내용이 있으면 “파일 내용으로 바꾸기” 버튼만 띄우고, 누를 때만 갈아끼운다.
    갈아끼울 때도 직전 내용을 따로 보관해서 되돌릴 수 있다. */
 let fileHasNewData = false;      /* 파일에 이 기기와 다른 내용이 담겨 있는가 */
+/* 이 기기에서 “이 파일 내용”을 이미 확인했는지 (바꿨거나 그대로 두기로 했거나).
+   확인하기 전까지는 안내가 계속 뜬다 — 예전에는 아무거나 한 번 저장하면 안내가 사라져 버렸다. */
+const ACK_KEY = 'crimescene_insta_ackfp';
+function ackFp(){ try{ return localStorage.getItem(ACK_KEY) || ''; }catch(e){ return ''; } }
+function setAckFp(){ try{ localStorage.setItem(ACK_KEY, DATA_FP); }catch(e){} fileHasNewData = false; }
 let saveBlocked = false;         /* 저장된 내용을 읽지 못한 상태 → 저장(덮어쓰기) 금지 */
 let loadedFrom = '';             /* 'idb' | 'ls' | 'file' */
 let normLoss = 0;                /* 구조 정리 중에 사라진 사진 수 (0이어야 정상) */
@@ -3598,7 +3603,9 @@ async function load(){
 
   if(box && box.data){
     baseFp = box.base || null;
-    fileHasNewData = (box.version !== DATA_VERSION);
+    /* 파일에 담겨 온 내용이 이 기기에서 아직 확인하지 않은 것이면 안내를 띄운다.
+       (버전이 같아도 내용이 바뀌었으면 지문 DATA_FP 가 달라진다) */
+    fileHasNewData = (ackFp() !== DATA_FP);
     /* 저장된 원본은 그대로 두고 복사본을 손질한다 —
        구조를 정리하다 사진이 사라지더라도 원본은 남아 되돌릴 수 있다 */
     const before = countImages(box.data);
@@ -3614,6 +3621,7 @@ async function load(){
   loadedFrom = 'file';
   const fresh = normalize(deepCopy(EMBEDDED_DATA));   /* 처음 설치한 기기만 파일 내용으로 시작 */
   baseFp = fingerprint(fresh);
+  setAckFp();                                        /* 지금 파일 내용으로 시작했으니 확인된 상태 */
   return fresh;
 }
 
@@ -3667,7 +3675,7 @@ async function useFileData(){
   if(box && box.data){ restorePoint = box; try{ await idbSetKey(IDB_PREV, box); }catch(e){} }
   data = normalize(deepCopy(EMBEDDED_DATA));
   baseFp = fingerprint(data);
-  fileHasNewData = false;
+  setAckFp();                      /* 이 파일 내용을 적용했음 */
   fixView();
   save(); applyLogo(); applyBottomPad(); renderFeed();
   if($('#adminOverlay').classList.contains('active')) renderAdmin();
@@ -5133,7 +5141,18 @@ function editsBannerHTML(){
 }
 function renderAdminList(){
   const body=$('#paneList');
-  body.innerHTML = `
+  /* 파일에 새 내용이 담겨 왔다는 안내는 테마를 연 화면에서도 보여야 한다.
+     (폰에서는 한 칸씩 보이므로, 테마 목록 화면으로 돌아가지 않으면 안내를 못 본다) */
+  const fileBar = fileHasNewData ? `
+    <div class="asec" style="background:#eef4ff;border:1px solid #cfe0ff">
+      <h3 style="color:#2f4d80">이 파일에 다른 내용이 담겨 있습니다</h3>
+      <div class="hint" style="margin-top:0;color:#2f4d80">지금 화면은 <b>이 기기에 저장된 내용</b>입니다.
+        파일에 담겨 온 내용(이미지 ${countImages(EMBEDDED_DATA)}개 · 버전 ${esc(DATA_VERSION)})으로 바꾸려면 아래를 누르세요.
+        바꾸기 전 내용은 보관해 두므로 되돌릴 수 있습니다.</div>
+      <button class="btn btn-dark btn-block" id="useFile2">파일 내용으로 바꾸기</button>
+      <button class="btn btn-ghost btn-block" id="keepMine2" style="margin-top:6px">이 기기 내용 그대로 두기</button>
+    </div>` : '';
+  body.innerHTML = fileBar + `
     <div class="asec" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm pane-back" id="listUp">‹ 테마 목록</button>
       <span style="font-size:14px;font-weight:700;flex:1">${esc((themeOf(curGid)||{}).name||'테마')}</span>
@@ -5159,6 +5178,12 @@ function renderAdminList(){
       <button data-at="stories" class="${adminTab==='stories'?'on':''}">스토리</button>
     </div>
     <div id="adminSec"></div>`;
+  const uf2=$('#useFile2');
+  if(uf2) uf2.onclick = ()=> confirmDialog(
+    '파일에 담겨 온 내용으로 바꿀까요?\n지금 이 기기에 저장된 내용은 따로 보관되고, 바로 되돌릴 수 있습니다.',
+    ()=> useFileData(), '파일 내용으로 바꾸기', '취소');
+  const km2=$('#keepMine2');
+  if(km2) km2.onclick = ()=>{ setAckFp(); toast('이 기기에 저장된 내용을 그대로 씁니다'); renderAdmin(); };
   $('#listUp').onclick = ()=>{ adminView='tree'; adminEdit=null; adminPane='tree'; renderAdmin(); };
   $('#ed-viewas').onchange = e=>{ setViewAs(e.target.value); renderFeed(); renderAdmin(); };
   body.querySelectorAll('[data-at]').forEach(b=> b.onclick=()=>{ adminTab=b.dataset.at; adminEdit=null; importPath=null; renderAdmin(); });
@@ -5183,6 +5208,7 @@ function restoreBannerHTML(){
         파일에 담겨 온 내용(이미지 ${countImages(EMBEDDED_DATA)}개 · 버전 ${esc(DATA_VERSION)})으로 바꾸려면 아래를 누르세요.
         바꾸기 전 내용은 보관해 두므로 되돌릴 수 있습니다.</div>
       <button class="btn btn-dark btn-block" id="useFile">파일 내용으로 바꾸기</button>
+      <button class="btn btn-ghost btn-block" id="keepMine" style="margin-top:6px">이 기기 내용 그대로 두기</button>
     </div>`;
   }
   if(restorePoint && restorePoint.data){
@@ -5258,6 +5284,8 @@ function wireBackupSection(){
   if(uf) uf.onclick = ()=> confirmDialog(
     '파일에 담겨 온 내용으로 바꿀까요?\n지금 이 기기에 저장된 내용은 따로 보관되고, 바로 되돌릴 수 있습니다.',
     ()=> useFileData(), '파일 내용으로 바꾸기', '취소');
+  const km=$('#keepMine');
+  if(km) km.onclick = ()=>{ setAckFp(); toast('이 기기에 저장된 내용을 그대로 씁니다'); renderAdmin(); };
   const rp=$('#restorePrev');
   if(rp) rp.onclick = ()=> confirmDialog(
     '보관해 둔 직전 내용으로 되돌릴까요?\n지금 화면의 내용은 사라집니다.',
