@@ -181,6 +181,12 @@
   .dmt-name { flex:1; min-width:0; font-size:16px; font-weight:700; color:#262626; display:flex;
     align-items:center; gap:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .dmt-name .after { font-weight:500; color:#262626; }
+  /* 아이디 아래 이름 한 줄 (실제 인스타그램처럼) */
+  .dmt-name.two { flex-direction:column; align-items:flex-start; gap:0; }
+  .dmt-name .l1 { display:flex; align-items:center; gap:3px; max-width:100%; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; line-height:1.2; }
+  .dmt-name .l2 { font-size:12px; font-weight:400; color:#8e8e8e; max-width:100%; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; line-height:1.3; margin-top:1px; }
   .dmt-ico { color:#262626; display:flex; flex-shrink:0; }
   .dmt-ico svg { width:26px; height:26px; }
   .dm-thread { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:3px;
@@ -3482,6 +3488,28 @@ function confirmDialog(msg,onYes,yesLabel,noLabel,onNo){
   n.onclick=()=>{c();onNo&&onNo();};
 }
 function fmtNum(n){ n=Number(n)||0; return n.toLocaleString('en-US'); }
+/* 손님 화면에 보이는 숫자 — 한국 인스타그램처럼 만·억 단위로 줄여 쓴다.
+     9,999 이하 → 1,234     1만 이상 → 1.2만 · 30만 · 123만     1억 이상 → 1.5억
+   (관리자 화면에서는 입력한 숫자를 그대로 보여주므로 fmtNum 을 쓴다) */
+function fmtK(n){
+  n = Number(n) || 0;
+  const neg = n < 0;
+  n = Math.abs(Math.round(n));
+  const cut = v => {
+    const s = (Math.floor(v*10)/10).toFixed(1);      /* 소수 첫째 자리까지, 내림 */
+    return s.slice(-2) === '.0' ? s.slice(0, -2) : s;
+  };
+  let out;
+  if(n >= 100000000){ const v = n/100000000; out = (v >= 100 ? Math.round(v) : cut(v)) + '억'; }
+  else if(n >= 10000){
+    const v = n/10000;
+    const r = (v >= 100) ? Math.round(v) : Number(cut(v));   /* 100만 이상은 소수점 없이 */
+    if(r >= 10000) out = (Math.round(n/10000000)/10) + '억';  /* 반올림해서 1억이 되는 경우 */
+    else out = (r >= 1000 ? r.toLocaleString('en-US') : r) + '만';
+  }
+  else out = n.toLocaleString('en-US');
+  return (neg ? '-' : '') + out;
+}
 
 /* 파일에 들어있는 내용의 지문.
    DATA_VERSION 을 고치지 않고 내용만 바꿔도 “새 파일”로 인식하게 해준다. */
@@ -3833,8 +3861,25 @@ function saveView(){
 }
 function clearView(){
   curGid=''; viewAsId=''; startMode=''; viewSaved=false; viewThemeName=''; viewUserName='';
-  try{ localStorage.removeItem(VIEW_KEY); localStorage.removeItem(PAD_KEY); }catch(e){}
+  branchLock = null;                       /* 고른 지점도 함께 푼다 (?reset=1 로 지점을 다시 고를 수 있게) */
+  try{
+    localStorage.removeItem(VIEW_KEY);
+    localStorage.removeItem(PAD_KEY);
+    localStorage.removeItem(BRANCH_KEY);   /* 이 폰이 쓰던 지점 */
+    localStorage.removeItem(ACK_KEY);      /* 파일 내용 확인 표시 */
+  }catch(e){}
   try{ return idbSetKey(IDB_VIEW, null).catch(()=>{}); }catch(e){ return Promise.resolve(); }
+}
+/* 내용은 그대로 두고 “이 폰이 쓸 지점”만 다시 고르게 한다 */
+function resetBranch(){
+  branchLock = null;
+  try{ localStorage.removeItem(BRANCH_KEY); }catch(e){}
+  curGid=''; viewAsId=''; viewThemeName=''; viewUserName='';
+  saveView(); fixView();
+  if($('#adminOverlay')) $('#adminOverlay').classList.remove('active');
+  isAdmin = false; $('#modePill').classList.remove('show');
+  renderFeed();
+  renderBranchPicker();
 }
 function allGroupIds(){
   const out=[];
@@ -4452,7 +4497,7 @@ function postCard(p, detail){
     }).join('');
   } else {
     const n = cmtCountOf(p);
-    commentsBlock = n>0 ? `<div class="post-comments-link" data-open="${p.id}">댓글 ${fmtNum(n)}개 모두 보기</div>` : '';
+    commentsBlock = n>0 ? `<div class="post-comments-link" data-open="${p.id}">댓글 ${fmtK(n)}개 모두 보기</div>` : '';
   }
 
   card.innerHTML = `
@@ -4466,7 +4511,7 @@ function postCard(p, detail){
     </div>
     ${img}
     <div class="post-actions">${likeHtml}${cmtHtml}${shareHtml}<span class="spacer"></span>${saveHtml}</div>
-    <div class="post-likes">좋아요 ${fmtNum(p.likes)}개</div>
+    <div class="post-likes">좋아요 ${fmtK(p.likes)}개</div>
     ${p.caption?`<div class="post-caption"><b>${esc(author.username)}</b> ${esc(p.caption)}</div>`:''}
     ${commentsBlock}
     <div class="post-time">${esc(timeLabel(p))}</div>`;
@@ -4614,8 +4659,8 @@ function renderProfile(){
       <div class="prof-av">${u.avatar?`<img src="${u.avatar}">`:defaultAvatar()}</div>
       <div class="prof-stats">
         <div><div class="num">${myPosts.length}</div><div class="lbl">게시물</div></div>
-        <div><div class="num">${fmtNum(u.followers)}</div><div class="lbl">팔로워</div></div>
-        <div><div class="num">${fmtNum(u.following)}</div><div class="lbl">팔로우</div></div>
+        <div><div class="num">${fmtK(u.followers)}</div><div class="lbl">팔로워</div></div>
+        <div><div class="num">${fmtK(u.following)}</div><div class="lbl">팔로우</div></div>
       </div>
     </div>
     <div class="prof-name">${esc(u.name||'')}</div>
@@ -4810,14 +4855,19 @@ function navDMThread(dmid){
   const meId=(mainUser()||{}).id;
   const group = dmIsGroup(dm);
   const u=dmPeer(dm)||{username:'unknown'};
-  /* 머리글 : 단톡은 겹친 사진 + 방 이름 + 인원수 */
+  /* 머리글 : 윗줄은 아이디(단톡은 방 이름), 아랫줄은 이름 */
+  const head=$('#dmThreadName');
   if(group){
-    const av=$('#dmThreadAv');
-    av.innerHTML = avatarStackHTML(dmOthers(dm), 34);
-    $('#dmThreadName').innerHTML = `${esc(dmTitle(dm))} <span style="color:#8e8e8e;font-weight:400">${dmMembers(dm).length}</span><span class="after">›</span>`;
+    $('#dmThreadAv').innerHTML = avatarStackHTML(dmOthers(dm), 34);
+    const mates = dmOthers(dm).map(x=> x.name || ('@'+x.username)).join(', ');
+    head.className = 'dmt-name' + (mates ? ' two' : '');
+    head.innerHTML = `<span class="l1">${esc(dmTitle(dm))} <span style="color:#8e8e8e;font-weight:400">${dmMembers(dm).length}</span><span class="after">›</span></span>`
+      + (mates ? `<span class="l2">${esc(mates)}</span>` : '');
   } else {
     $('#dmThreadAv').innerHTML = u.avatar?`<img src="${u.avatar}">`:defaultAvatar();
-    $('#dmThreadName').innerHTML = `${esc(u.username)}${u.verified?verifiedBadge:''}<span class="after">›</span>`;
+    head.className = 'dmt-name' + (u.name ? ' two' : '');
+    head.innerHTML = `<span class="l1">${esc(u.username)}${u.verified?verifiedBadge:''}<span class="after">›</span></span>`
+      + (u.name ? `<span class="l2">${esc(u.name)}</span>` : '');
   }
   const box=$('#dmThreadScroll'); box.innerHTML='';
   let prevStamp='', prevFrom='';
@@ -4984,7 +5034,8 @@ function renderAdminTree(){
     ${commonSettingsHTML()}
     <div class="asec">
       <h3>${treePath.length > treeMinDepth() ? `<button class="btn btn-ghost btn-sm" id="treeUp">‹ 상위로</button> `:''}${where}</h3>
-      ${branchLocked() ? `<div class="hint" style="margin-top:0">이 폰은 <b>${esc(lockedC1().name)}</b> 지점 전용입니다. 다른 지점은 볼 수 없습니다.</div>` : ''}
+      ${lockedC1() ? `<div class="hint" style="margin-top:0">이 폰은 <b>${esc(lockedC1().name)}</b> 지점으로 지정돼 있습니다.${branchLocked()?' 다른 지점은 볼 수 없습니다.':''}
+        <button class="btn btn-ghost btn-sm btn-block" id="branchAgain" style="margin-top:7px">지점 다시 고르기</button></div>` : ''}
       ${rows}
       <button class="btn btn-dark btn-block" id="treeAdd">${!c1?'＋ 지점 추가':'＋ 테마 추가'}</button>
       ${(treePath.length && !branchLocked())?`<button class="btn btn-danger btn-block" id="treeDel" style="margin-top:6px">이 지점 삭제</button>`:''}
@@ -5010,6 +5061,10 @@ function renderAdminTree(){
   body.querySelectorAll('[data-deltheme]').forEach(b=> b.onclick=()=> deleteTheme(b.dataset.deltheme));
   $('#treeAdd').onclick = addNode;
   const td=$('#treeDel'); if(td) td.onclick = deleteNode;
+  const ba=$('#branchAgain');
+  if(ba) ba.onclick = ()=> confirmDialog(
+    '이 폰이 쓸 지점을 다시 고를까요?\n저장된 내용(사진·게시물)은 그대로 둡니다.',
+    ()=> resetBranch(), '지점 다시 고르기', '취소');
   wireCommonSettings();
   wireBackupSection();
 }
@@ -5320,6 +5375,9 @@ function accountFieldsHTML(u){
       <div class="field"><label>팔로워</label><input data-af="followers" type="number" value="${Number(u.followers)||0}"></div>
       <div class="field"><label>팔로우</label><input data-af="following" type="number" value="${Number(u.following)||0}"></div>
     </div>
+    <div style="font-size:11.5px;color:#98a5b2;margin:-6px 0 10px">손님 화면 표시 :
+      <b data-af="numprev">${esc(fmtK(u.followers))} · ${esc(fmtK(u.following))}</b>
+      <span style="color:#c3ccd4">&nbsp;·&nbsp; 1만 넘으면 30만 · 1.2만 처럼 줄여서 보입니다</span></div>
     <div class="field"><label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" data-af="verified" ${u.verified?'checked':''} style="width:auto"> 인증 배지(파란 체크)</label></div>`;
 }
 function wireAccountFields(u, redraw){
@@ -5334,8 +5392,9 @@ function wireAccountFields(u, redraw){
   };
   q('name').oninput=e=>{ u.name=e.target.value; save(); };
   q('bio').oninput=e=>{ u.bio=e.target.value; save(); };
-  q('followers').oninput=e=>{ u.followers=Number(e.target.value)||0; save(); };
-  q('following').oninput=e=>{ u.following=Number(e.target.value)||0; save(); };
+  const np = ()=>{ const el=q('numprev'); if(el) el.textContent = fmtK(u.followers) + ' · ' + fmtK(u.following); };
+  q('followers').oninput=e=>{ u.followers=Number(e.target.value)||0; save(); np(); };
+  q('following').oninput=e=>{ u.following=Number(e.target.value)||0; save(); np(); };
   q('verified').onchange=e=>{ u.verified=e.target.checked; save(); };
 }
 
